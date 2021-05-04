@@ -4,7 +4,6 @@ from dateutil.relativedelta import relativedelta
 import pandas_datareader.data as pdr
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import yfinance as yf
 
 yf.pdr_override()
@@ -29,33 +28,57 @@ def replace_negatives(table):
 
 def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                  cov_matrix_6m, cov_matrix_poz_3m):
-    weights_coins = np.zeros((range(coin_names), 1))
+    weights_coins = np.zeros(len(coin_names))
     old_max = 0
     old_weights = weights_coins
     new_max = 0
     new_weights = weights_coins
-    for i in range(coin_names):
+    regression = 0.005
+    change = (1 / (1 - regression)) * regression
+    for i in range(len(coin_names)):
         if i == 0:
             weights_coins[i] = 1
-            weights_coins /= np.sum(weights_coins)
+            # weights_coins /= np.sum(weights_coins)
             old_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
-                                       cov_matrix_6m, cov_matrix_poz_3m)
+                                       cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
             new_max = old_max
-            new_weights = weights_coins
+            new_weights = weights_coins.copy()
         else:
-            old_weights = new_weights
+            old_weights = new_weights.copy()
             old_max = new_max
+            weights_coins[weights_coins < 0.000001] = 0
+            weights_coins /= np.sum(weights_coins)
             while True:
-                weights_coins[i] += 0.005
+                weights_coins[i] += change
                 weights_coins /= np.sum(weights_coins)
                 new_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
-                                           cov_matrix_6m, cov_matrix_poz_3m)
-                new_weights = weights_coins
+                                           cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
+                new_weights = weights_coins.copy()
                 if new_max < old_max:
+                    weights_coins = old_weights.copy()
                     break
                 else:
                     old_max = new_max
-                    old_weights = new_weights
+                    old_weights = new_weights.copy()
+
+    for i in range(len(coin_names)-1, -1, -1):
+        old_weights = new_weights.copy()
+        old_max = new_max
+        weights_coins[weights_coins < 0.000001] = 0
+        weights_coins /= np.sum(weights_coins)
+        while True:
+            weights_coins[i] -= change
+            weights_coins[weights_coins < 0.000001] = 0
+            weights_coins /= np.sum(weights_coins)
+            new_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
+                                       cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
+            new_weights = weights_coins.copy()
+            if new_max <= old_max:
+                weights_coins = old_weights.copy()
+                break
+            else:
+                old_max = new_max
+                old_weights = new_weights.copy()
 
     return old_weights
 
@@ -88,4 +111,8 @@ mean_sortino_3m = day_returns_poz_3m.mean()
 sharpe_3m_cov = day_returns_3m.cov()
 sharpe_6m_cov = day_returns_6m.cov()
 sortino_3m_cov = day_returns_poz_3m.cov()
-print(optimisation(coins, mean_sharpe_3m, mean_sharpe_6m, mean_sortino_3m, sharpe_3m_cov, sharpe_6m_cov, sortino_3m_cov))
+
+
+results = optimisation(coins, mean_sharpe_3m, mean_sharpe_6m, mean_sortino_3m, sharpe_3m_cov, sharpe_6m_cov,
+                       sortino_3m_cov)
+print(pd.DataFrame(list(zip(coins, results)), columns=['Coins', 'Weights']))
