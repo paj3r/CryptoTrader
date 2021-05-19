@@ -33,9 +33,10 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
     old_weights = weights_coins
     new_max = 0
     new_weights = weights_coins
-    regression = 0.01
+    regression = 0.0001
     change = (1 / (1 - regression)) * regression
-    natancnost = 2
+    natancnost = 5
+    natancnost_end = 1
     for i in range(len(coin_names)):
         if i == 0:
             weights_coins[i] = 1
@@ -49,9 +50,11 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
             old_max = new_max
             weights_coins[weights_coins < 0.000001] = 0
             weights_coins /= np.sum(weights_coins)
+            #weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
             while True:
                 weights_coins[i] += change
                 weights_coins /= np.sum(weights_coins)
+                # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
                 new_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                            cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
                 new_weights = weights_coins.copy()
@@ -67,10 +70,12 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
         old_max = new_max
         weights_coins[weights_coins < 0.000001] = 0
         weights_coins /= np.sum(weights_coins)
+        # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
         while True:
             weights_coins[i] -= change
             weights_coins[weights_coins < 0.000001] = 0
             weights_coins /= np.sum(weights_coins)
+            # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
             new_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                        cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
             new_weights = weights_coins.copy()
@@ -80,17 +85,17 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
             else:
                 old_max = new_max
                 old_weights = new_weights.copy()
-
+    print(old_weights)
+    print("Ratio_pre: "+str(calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
+                                       cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
+    old_weights = np.round(old_weights / np.linalg.norm(old_weights, 1.0), 2)
     print("Ratio: "+str(calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                        cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
-    old_weights = np.round(old_weights, natancnost)
-    old_weights /= np.sum(old_weights)
     return old_weights
 
 
 def calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                      cov_matrix_6m, cov_matrix_poz_3m, weights_coins):
-    weights_coins /= np.sum(weights_coins)
     returns_3m = np.sum(mean_return_3m * weights_coins) * 252
     returns_6m = np.sum(mean_return_6m * weights_coins) * 252
     # returns_poz_3m = np.sum(mean_return_poz_3m*weights_coins)*252
