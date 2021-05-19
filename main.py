@@ -7,7 +7,7 @@ import pandas as pd
 import yfinance as yf
 
 yf.pdr_override()
-coins = ['XRP-USD', 'LTC-USD', 'BCH-USD', 'XLM-USD', 'EOS-USD', 'XTZ-USD', 'ZRX-USD', 'OMG-USD']
+coins = ['XRP-USD', 'BTC-USD', 'ETH-USD', 'BNB-USD', 'ADA-USD', 'DOT1-USD', 'BCH-USD', 'UNI3-USD', 'LTC-USD', 'XLM-USD']
 # teže koliko bomo upoštevali kater indikator v optimizaciji format [SHARPE(3m), SHARPE(6m), SORTINO(3m)]
 weights_ratios = [0.3, 0.3, 0.4]
 datum = date.today()
@@ -33,8 +33,9 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
     old_weights = weights_coins
     new_max = 0
     new_weights = weights_coins
-    regression = 0.005
+    regression = 0.01
     change = (1 / (1 - regression)) * regression
+    natancnost = 2
     for i in range(len(coin_names)):
         if i == 0:
             weights_coins[i] = 1
@@ -80,6 +81,10 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
                 old_max = new_max
                 old_weights = new_weights.copy()
 
+    print("Ratio: "+str(calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
+                                       cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
+    old_weights = np.round(old_weights, natancnost)
+    old_weights /= np.sum(old_weights)
     return old_weights
 
 
@@ -115,4 +120,4 @@ sortino_3m_cov = day_returns_poz_3m.cov()
 
 results = optimisation(coins, mean_sharpe_3m, mean_sharpe_6m, mean_sortino_3m, sharpe_3m_cov, sharpe_6m_cov,
                        sortino_3m_cov)
-print(pd.DataFrame(list(zip(coins, results)), columns=['Coins', 'Weights']))
+print(pd.DataFrame(list(zip(coins, results*100)), columns=['Coins', 'Weights (%)']))
