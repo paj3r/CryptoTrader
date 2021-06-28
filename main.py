@@ -1,4 +1,6 @@
 import math
+import pmdarima
+import arch
 from datetime import date
 from dateutil.relativedelta import relativedelta
 import pandas_datareader.data as pdr
@@ -76,7 +78,7 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
             old_max = new_max
             weights_coins[weights_coins < 0.000001] = 0
             weights_coins /= np.sum(weights_coins)
-            #weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
+            # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
             while True:
                 weights_coins[i] += change
                 weights_coins /= np.sum(weights_coins)
@@ -111,7 +113,7 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
             else:
                 old_max = new_max
                 old_weights = new_weights.copy()
-    print(old_weights)
+    # print(old_weights)
     print("Ratio_pre: "+str(calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                        cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
     old_weights = np.round(old_weights / np.linalg.norm(old_weights, 1.0), 2)
@@ -139,6 +141,7 @@ def calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_mat
     rez = sharpe_3m * weights_ratios[0] + sharpe_6m * weights_ratios[1] + sortino_3m * weights_ratios[2]
     return rez
 
+
 def calculate_RSI(prices, dolz):
     table = pd.DataFrame(list(zip(coins, np.zeros(len(coins)))), columns=['Coins', 'RSI'])
     for index in range(len(coins)):
@@ -146,26 +149,51 @@ def calculate_RSI(prices, dolz):
     return table
 
 
-prices_3m = get_closing(coins, datum_3m, datum)
-prices_6m = get_closing(coins, datum_6m, datum)
+def arima_garch_prediction(prices):
+    predictions = np.zeros(len(coins))
+    for i in range(len(coins)):
+        if portfolio[i] == 0:
+            continue
+        returns = prices[coins[i]].pct_change().dropna()
+        returns = returns*100
+        arima_model = pmdarima.auto_arima(returns)
+        p, d, q = arima_model.order
+        arima_residuals = arima_model.resid()
+
+        garch = arch.arch_model(arima_residuals, p=1, q=1)
+        garch_fitted = garch.fit(disp=0)
+
+        predicted_mu = arima_model.predict(n_periods=1)[0]
+
+        garch_forecast = garch_fitted.forecast(horizon=1, reindex=False)
+        predicted_et = garch_forecast.mean['h.1'].iloc[-1]
+
+        prediction = predicted_mu + predicted_et
+        predictions[i] = prediction
+    return predictions
+
+
+def strategy():
+    prices_3m = get_closing(coins, datum_3m, datum)
+    prices_6m = get_closing(coins, datum_6m, datum)
+    day_returns_3m = prices_3m.pct_change()
+    day_returns_6m = prices_6m.pct_change()
+    day_returns_poz_3m = replace_negatives(prices_3m.pct_change())
+    mean_sharpe_3m = day_returns_3m.mean()
+    mean_sharpe_6m = day_returns_6m.mean()
+    mean_sortino_3m = day_returns_poz_3m.mean()
+    sharpe_3m_cov = day_returns_3m.cov()
+    sharpe_6m_cov = day_returns_6m.cov()
+    sortino_3m_cov = day_returns_poz_3m.cov()
+    results = optimisation(coins, mean_sharpe_3m, mean_sharpe_6m, mean_sortino_3m, sharpe_3m_cov, sharpe_6m_cov,
+                           sortino_3m_cov)
+    print(pd.DataFrame(list(zip(coins, results * 100)), columns=['Coins', 'Weights (%)']))
+    return results
+
+
 prices_4h = get_4h_data(coins, datum_3m, datum)
-#volums_3m = get_volume(coins, datum_3m, datum).mean()
-#print(volums_3m)
-#mkcap = get_marketCap(coins, datum_3m, datum)
-#nvts = mkcap/volums_3m
-#rint(nvts)
-day_returns_3m = prices_3m.pct_change()
-day_returns_6m = prices_6m.pct_change()
-day_returns_poz_3m = replace_negatives(prices_3m.pct_change())
-mean_sharpe_3m = day_returns_3m.mean()
-mean_sharpe_6m = day_returns_6m.mean()
-mean_sortino_3m = day_returns_poz_3m.mean()
-sharpe_3m_cov = day_returns_3m.cov()
-sharpe_6m_cov = day_returns_6m.cov()
-sortino_3m_cov = day_returns_poz_3m.cov()
-
-
-results = optimisation(coins, mean_sharpe_3m, mean_sharpe_6m, mean_sortino_3m, sharpe_3m_cov, sharpe_6m_cov,
-                       sortino_3m_cov)
-print(pd.DataFrame(list(zip(coins, results*100)), columns=['Coins', 'Weights (%)']))
-print(calculate_RSI(prices_4h, 14))
+portfolio = strategy()
+predicts = arima_garch_prediction(prices_4h)
+predicts[predicts > 0] = 1
+print(pd.DataFrame(list(zip(coins, predicts)), columns=['Coins', 'ARIMA+GARCH']))
+print(calculate_RSI(prices_4h, 15))
