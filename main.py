@@ -8,6 +8,7 @@ import pandas_ta as pta
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from sklearn import linear_model
 
 yf.pdr_override()
 coins = ['XRP-USD', 'BTC-USD', 'ETH-USD', 'BNB-USD', 'ADA-USD', 'DOT1-USD', 'BCH-USD', 'UNI3-USD', 'LTC-USD',
@@ -144,8 +145,16 @@ def calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_mat
 
 def calculate_RSI(prices, dolz):
     table = pd.DataFrame(list(zip(coins, np.zeros(len(coins)))), columns=['Coins', 'RSI'])
+    table = np.zeros(len(coins))
     for index in range(len(coins)):
-        table.loc[index, 'RSI'] = pta.rsi(prices[coins[index]], length=dolz)[-1]
+        rez = pta.rsi(prices[coins[index]], length=dolz)[-1]
+        if rez > 70:
+            table[index] = -1
+        else:
+            if rez < 30:
+                table[index] = 1
+            else:
+                table[index] = 0
     return table
 
 
@@ -170,6 +179,7 @@ def arima_garch_prediction(prices):
 
         prediction = predicted_mu + predicted_et
         predictions[i] = prediction
+    predictions[predictions > 0] = 1
     return predictions
 
 
@@ -191,9 +201,43 @@ def strategy():
     return results
 
 
-prices_4h = get_4h_data(coins, datum_3m, datum)
+def linear_regression(prices, window_size):
+    predictions = np.zeros(len(coins))
+    data = prices[-window_size:]
+    for i in range(len(coins)):
+        if portfolio[i] == 0:
+            continue
+        returns = data[coins[i]].pct_change().dropna()
+        indices = np.array([*range(0, 59, 1)]).reshape(-1, 1)
+        reg = linear_model.LinearRegression()
+        reg.fit(indices, returns)
+        predictions[i] = reg.coef_
+    predictions[predictions > 0] = 1
+    return predictions
+
+
+def tactics():
+    prices_4h = get_4h_data(coins, datum_3m, datum)
+    linear_predicts = linear_regression(prices_4h, 60)
+    print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
+    arga_predicts = arima_garch_prediction(prices_4h)
+    print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
+    rsi_predictions = calculate_RSI(prices_4h, 14)
+    print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
+    actions = ["" for i in range(len(coins))]
+    for i in range(len(coins)):
+        if portfolio[i] == 0:
+            actions[i] = "N/A"
+            continue
+        if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
+            actions[i] = "BUY"
+        if (linear_predicts[i] == 0 or arga_predicts[i] == 0) and rsi_predictions[i] == -1:
+            actions[i] = "SELL"
+        else:
+            actions[i] = "WAIT"
+    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
+    return actions
+
+
 portfolio = strategy()
-predicts = arima_garch_prediction(prices_4h)
-predicts[predicts > 0] = 1
-print(pd.DataFrame(list(zip(coins, predicts)), columns=['Coins', 'ARIMA+GARCH']))
-print(calculate_RSI(prices_4h, 15))
+actions = tactics()
