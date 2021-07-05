@@ -294,48 +294,73 @@ profits = []
 positions = np.zeros(len(coins))
 buying_prices = np.zeros(len(coins))
 test_port = np.zeros(len(coins))
-print(test_port)
 today_plus_3m = today
 while today < end_date_test:
     if today == today_plus_3m:
+        print("Strategy change")
         test_port = strategy_test(test_1day_data[(today + relativedelta(months=-3)):today],
                               test_1day_data[(today + relativedelta(months=-6)):today])
         today_plus_3m = today + relativedelta(months=+3)
     if np.array_equal(test_port, np.zeros(len(coins))):
         today = today + relativedelta(months=+3)
+        print("Bad strategy, skip 3 months")
         continue
     # print(test_4h_data[:today])
     prices_4h = test_4h_data[:today+relativedelta(days=+1)]
-    for i in range(-6, 0):
-        cur_prices = prices_4h[:i]
+    print(today)
+    for ix in range(-6, 0):
+        cur_prices = prices_4h[:ix]
         actions = tactics_test(cur_prices, test_port)
-        for coin in range(0, len(coins)):
-            cur_price = cur_prices.tail(1)[coins[i]]
+        for i in range(0, len(coins)):
+            cur_price = cur_prices.tail(1)[coins[i]].iloc[0]
             if test_port[i] == 0:
                 continue
                 # če se je cena znižala gremo vn
-            if cur_price < buying_prices[i] and positions[i] == 1:
+            if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1):
                 positions[i] = 0
                 pricediff = buying_prices[i] - cur_price
                 profits[i] += pricediff
                 pct_profit[i].append((cur_price/buying_prices[i]))
+                print("Panic sell " + coins[i])
                 continue
-            if actions[i] == "BUY" and positions[i] == 0:
+            if bool(actions[i] == "BUY") and bool(positions[i] == 0):
                 positions[i] = 1
                 buying_prices[i] = cur_price
+                print("Buy " + coins[i])
                 continue
-            if actions[i] == "SELL" and positions[i] == 1:
+            if bool(actions[i] == "SELL") and bool(positions[i] == 1):
                 positions[i] = 0
                 pricediff = buying_prices[i] - cur_price
                 profits[i] += pricediff
                 pct_profit[i].append((cur_price / buying_prices[i]))
+                print("Sell " + coins[i])
                 continue
         today = today + relativedelta(days=+1)
-
+        if today == today_plus_3m:
+            cur_prices = prices_4h[:i]
+            actions = tactics_test(cur_prices, test_port)
+            for coin in range(0, len(coins)):
+                cur_price = cur_prices.tail(1)[coins[i]]
+                if test_port[i] == 0:
+                    continue
+                    # če se je cena znižala gremo vn
+                if positions[i] == 1:
+                    positions[i] = 0
+                    pricediff = buying_prices[i] - cur_price
+                    profits[i] += pricediff
+                    pct_profit[i].append((cur_price / buying_prices[i]))
+                    print("Selling all")
+                    continue
     # actions = tactics_test(prices_4h, test_port)
     # print(actions)
-    break
 
+f = open("profits.txt", "w")
+f.write("".join(profits))
+f.write("SUM:".join(sum(profits)))
+f.close()
+f = open("pctchange.txt", "w")
+f.write("".join(pct_profit))
+f.close()
 datum_3m = datum + relativedelta(months=-3)
 datum_6m = datum + relativedelta(months=-6)
 # portfolio = strategy()
