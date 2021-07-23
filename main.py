@@ -108,24 +108,26 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
     # print(old_weights)
     print("Ratio_pre: " + str(calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                                cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
-    old_weights = np.round(old_weights / np.linalg.norm(old_weights, 1.0), 2)
+    old_weights = np.round(old_weights / np.linalg.norm(old_weights, 1), 2)
     print("Ratio after rounding: " + str(
         calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                          cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
     old_weights = replace_zeroes(old_weights)
-    old_weights = np.round(old_weights / np.linalg.norm(old_weights, 1.0), 2)
+    old_weights = np.round(old_weights / np.linalg.norm(old_weights, 1), 2)
     print("Ratio after >10% rule: " + str(
         calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                          cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
-    ratio =  calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
-                         cov_matrix_6m, cov_matrix_poz_3m, old_weights)
-    if ratio < 2:
+    ratio = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
+                             cov_matrix_6m, cov_matrix_poz_3m, old_weights)
+    if ratio < 1:
         return np.zeros(len(coin_names))
     return old_weights
 
 
 def calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                      cov_matrix_6m, cov_matrix_poz_3m, weights_coins):
+    if (weights_coins == np.zeros(len(coins))).all():
+        return 0
     returns_3m = np.sum(mean_return_3m * weights_coins) * 252
     returns_6m = np.sum(mean_return_6m * weights_coins) * 252
     # returns_poz_3m = np.sum(mean_return_poz_3m*weights_coins)*252
@@ -145,26 +147,40 @@ def calculate_RSI(prices, dolz):
     table = np.zeros(len(coins))
     for index in range(len(coins)):
         rez = pta.rsi(prices[coins[index]], length=dolz)[-1]
-        if rez > 70:
-            table[index] = -1
+        if rez < 70:
+            table[index] = 1
         else:
-            if rez < 30:
-                table[index] = 1
-            else:
-                table[index] = 0
+            table[index] = 0
     return table
 
 
-def arima_garch_prediction(prices, portfolio):
+def calculate_RSI_bear(prices, dolz):
+    table = pd.DataFrame(list(zip(coins, np.zeros(len(coins)))), columns=['Coins', 'RSI'])
+    table = np.zeros(len(coins))
+    for index in range(len(coins)):
+        rez = pta.rsi(prices[coins[index]], length=dolz)[-1]
+        if rez < 30:
+            table[index] = 1
+        else:
+            table[index] = 0
+    return table
+
+
+def arima_garch_prediction(prices, portfo, window_size):
     predictions = np.zeros(len(coins))
     for i in range(len(coins)):
-        if portfolio[i] == 0:
+        if portfo[i] == 0:
             continue
         returns = prices[coins[i]].pct_change().dropna()
+        returns = returns[-window_size:]
         returns = returns * 100
         arima_model = pmdarima.auto_arima(returns)
         p, d, q = arima_model.order
         arima_residuals = arima_model.resid()
+
+        print(str(returns))
+        print(portfo)
+        print(window_size)
 
         garch = arch.arch_model(arima_residuals, p=1, q=1)
         garch_fitted = garch.fit(disp=0)
@@ -177,6 +193,7 @@ def arima_garch_prediction(prices, portfolio):
         prediction = predicted_mu + predicted_et
         predictions[i] = prediction
     predictions[predictions > 0] = 1
+    predictions[predictions < 0] = -1
     return predictions
 
 
@@ -198,62 +215,82 @@ def strategy():
     return results
 
 
-def linear_regression(prices, window_size, portfolio):
+def linear_regression(prices, window_size, portfo):
     predictions = np.zeros(len(coins))
     data = prices[-window_size:]
     for i in range(len(coins)):
-        if portfolio[i] == 0:
+        if portfo[i] == 0:
             continue
         returns = data[coins[i]].pct_change().dropna()
-        indices = np.array([*range(0, 59, 1)]).reshape(-1, 1)
+        indices = np.array([*range(0, len(returns), 1)]).reshape(-1, 1)
         reg = linear_model.LinearRegression()
         reg.fit(indices, returns)
         predictions[i] = reg.coef_
     predictions[predictions > 0] = 1
+    predictions[predictions < 0] = -1
     return predictions
 
 
-def tactics(portfolio):
+def tactics(portfo):
     prices_4h = get_4h_data(coins, datum_3m, datum)
-    linear_predicts = linear_regression(prices_4h, 60, portfolio)
+    linear_predicts = linear_regression(prices_4h, 60, portfo)
     print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
-    arga_predicts = arima_garch_prediction(prices_4h, portfolio)
+    arga_predicts = arima_garch_prediction(prices_4h, portfo, 120)
     print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
     rsi_predictions = calculate_RSI(prices_4h, 14)
     print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
     actions = ["" for i in range(len(coins))]
     for i in range(len(coins)):
-        if portfolio[i] == 0:
+        if portfo[i] == 0:
             actions[i] = "N/A"
             continue
         if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
             actions[i] = "BUY"
-        if (linear_predicts[i] == 0 or arga_predicts[i] == 0) and rsi_predictions[i] == -1:
-            actions[i] = "SELL"
         else:
-            actions[i] = "WAIT"
+            if (linear_predicts[i] == -1 or arga_predicts[i] == -1) and rsi_predictions[i] == -1:
+                actions[i] = "SELL"
+            else:
+                actions[i] = "WAIT"
     print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
     return actions
 
 
-def tactics_test(prices, portfolio):
-    linear_predicts = linear_regression(prices, 60, portfolio)
+def tactics_test(prices, portfo):
+    linear_predicts = linear_regression(prices, 60, portfo)
     print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
-    arga_predicts = arima_garch_prediction(prices, portfolio)
+    arga_predicts = arima_garch_prediction(prices, portfo, 120)
     print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
     rsi_predictions = calculate_RSI(prices, 14)
     print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
     actions = ["" for i in range(len(coins))]
     for i in range(len(coins)):
-        if portfolio[i] == 0:
+        if portfo[i] == 0:
             actions[i] = "N/A"
             continue
         if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
             actions[i] = "BUY"
-        if (linear_predicts[i] == 0 or arga_predicts[i] == 0) and rsi_predictions[i] == -1:
-            actions[i] = "SELL"
         else:
-            actions[i] = "WAIT"
+            actions[i] = "SELL"
+    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
+    return actions
+
+
+def tactics_test_bear(prices, portfo):
+    linear_predicts = linear_regression(prices, 60, portfo)
+    print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
+    arga_predicts = arima_garch_prediction(prices, portfo, 120)
+    print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
+    rsi_predictions = calculate_RSI_bear(prices, 14)
+    print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
+    actions = ["" for i in range(len(coins))]
+    for i in range(len(coins)):
+        if portfo[i] == 0:
+            actions[i] = "N/A"
+            continue
+        if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
+            actions[i] = "BUY"
+        else:
+            actions[i] = "SELL"
     print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
     return actions
 
@@ -276,52 +313,110 @@ def strategy_test(prices_3m, prices_6m):
     return results
 
 
+def get_ratio(prices_3m, prices_6m, weights):
+    # prices_3m = get_closing(coins, datum_3m, datum)
+    # prices_6m = get_closing(coins, datum_6m, datum)
+    tday_returns_3m = prices_3m.pct_change()
+    tday_returns_6m = prices_6m.pct_change()
+    tday_returns_poz_3m = replace_negatives(prices_3m.pct_change())
+    tmean_sharpe_3m = tday_returns_3m.mean()
+    tmean_sharpe_6m = tday_returns_6m.mean()
+    tmean_sortino_3m = tday_returns_poz_3m.mean()
+    tsharpe_3m_cov = tday_returns_3m.cov()
+    tsharpe_6m_cov = tday_returns_6m.cov()
+    tsortino_3m_cov = tday_returns_poz_3m.cov()
+    ratios = calculate_ratios(tmean_sharpe_3m, tmean_sharpe_6m, tmean_sortino_3m, tsharpe_3m_cov, tsharpe_6m_cov,
+                              tsortino_3m_cov, weights)
+    return ratios
+
+
 yf.pdr_override()
-coins = ['XRP-USD', 'BTC-USD', 'ETH-USD', 'BNB-USD', 'ADA-USD', 'KMD-USD', 'BCH-USD', 'DOGE-USD', 'LTC-USD',
-         'XLM-USD']
+coins = ['ADA-USD', 'BCH-USD', 'BNB-USD', 'BTC-USD', 'DOGE-USD', 'ETH-USD', 'KMD-USD', 'LTC-USD', 'XLM-USD',
+         'XRP-USD']
 # teže koliko bomo upoštevali kater indikator v optimizaciji format [SHARPE(3m), SHARPE(6m), SORTINO(3m)]
-weights_ratios = [0.5, 0.5, 0]
+weights_ratios = [0.4, 0.3, 0.3]
 datum = date.today()
 # print(datum)
 start_date_test = datum + relativedelta(days=-729)
 end_date_test = datum + relativedelta(days=-1)
-
-test_1day_data = get_closing(coins, start_date_test+relativedelta(months=-6), end_date_test)
+test_1day_data = get_closing(coins, start_date_test + relativedelta(months=-6), end_date_test)
 test_4h_data = get_4h_data(coins, start_date_test, end_date_test)
+test_4h_data.to_csv("4hdata.csv", encoding='utf-8')
 today = start_date_test + relativedelta(months=+3)
-pct_profit = [[]]
-profits = []
+pct_profit = [[] for i in range(len(coins))]
+loss = 0
+win = 0
+big_win = 0
+big_loss = 0
+money = 100
+wallets = np.zeros(len(coins))
+profits = np.zeros(len(coins))
 positions = np.zeros(len(coins))
 buying_prices = np.zeros(len(coins))
 test_port = np.zeros(len(coins))
 today_plus_3m = today
+bear = False
+btc_prices = []
+wallet_sum = []
 while today < end_date_test:
-    if today == today_plus_3m:
-        print("Strategy change")
+    if today >= today_plus_3m:
+        print("Strategy change" + "date: " + str(today))
+        wallets = np.zeros(len(coins))
         test_port = strategy_test(test_1day_data[(today + relativedelta(months=-3)):today],
-                              test_1day_data[(today + relativedelta(months=-6)):today])
+                                  test_1day_data[(today + relativedelta(months=-6)):today])
         today_plus_3m = today + relativedelta(months=+3)
+        ratio = get_ratio(test_1day_data[(today + relativedelta(months=-3)):today],
+                          test_1day_data[(today + relativedelta(months=-6)):today], test_port)
+        print(ratio)
+        for i in range(0, len(coins)):
+            if test_port[i] == 0:
+                continue
+            else:
+                wallets[i] = money * test_port[i]
+        if ratio > 2:
+            bear = False
+        else:
+            bear = True
     if np.array_equal(test_port, np.zeros(len(coins))):
         today = today + relativedelta(months=+3)
         print("Bad strategy, skip 3 months")
         continue
     # print(test_4h_data[:today])
-    prices_4h = test_4h_data[:today+relativedelta(days=+1)]
+    prices_4h = test_4h_data[:today + relativedelta(days=+1)]
     print(today)
     for ix in range(-6, 0):
         cur_prices = prices_4h[:ix]
-        actions = tactics_test(cur_prices, test_port)
+        btc_prices.append(float(cur_prices.tail(1)[coins[3]].iloc[0]))
+        wallet_sum.append(float(sum(wallets)))
+        print(wallets)
+        if bear:
+            actions = tactics_test_bear(cur_prices, test_port)
+        else:
+            actions = tactics_test(cur_prices, test_port)
         for i in range(0, len(coins)):
             cur_price = cur_prices.tail(1)[coins[i]].iloc[0]
             if test_port[i] == 0:
                 continue
                 # če se je cena znižala gremo vn
-            if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1):
+            if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1) and bear:
                 positions[i] = 0
-                pricediff = buying_prices[i] - cur_price
+                amount = wallets[i] / buying_prices[i]
+                pricediff = amount * (cur_price - buying_prices[i])
+                pricediff = pricediff - 0.0001 * pricediff
                 profits[i] += pricediff
-                pct_profit[i].append((cur_price/buying_prices[i]))
-                print("Panic sell " + coins[i])
+                if bool(pricediff.item() > 0):
+                    win += 1
+                    if bool(pricediff.item() > big_win):
+                        big_win = pricediff.item()
+                if bool(pricediff.item() < 0):
+                    loss += 1
+                    if bool(pricediff.item() < big_loss):
+                        big_loss = pricediff.item()
+                pctdiff = (cur_price / buying_prices[i]) - 1
+                pct_profit[i].append(pctdiff * test_port[i])
+                wallets[i] = amount * cur_price
+                print("Panic sell " + coins[i] + " diff: " + str(pricediff) + " pct: " + str(pctdiff) +
+                      " Profits: " + str(profits[i]) + " wallet: " + str(wallets[i]))
                 continue
             if bool(actions[i] == "BUY") and bool(positions[i] == 0):
                 positions[i] = 1
@@ -330,38 +425,75 @@ while today < end_date_test:
                 continue
             if bool(actions[i] == "SELL") and bool(positions[i] == 1):
                 positions[i] = 0
-                pricediff = buying_prices[i] - cur_price
+                amount = wallets[i] / buying_prices[i]
+                pricediff = amount * (cur_price - buying_prices[i])
+                pricediff = pricediff - 0.0001 * pricediff
                 profits[i] += pricediff
-                pct_profit[i].append((cur_price / buying_prices[i]))
-                print("Sell " + coins[i])
+                if bool(pricediff.item() > 0):
+                    win += 1
+                    if bool(pricediff.item() > big_win):
+                        big_win = pricediff.item()
+                if bool(pricediff.item() < 0):
+                    loss += 1
+                    if bool(pricediff.item() < big_loss):
+                        big_loss = pricediff.item()
+                pctdiff = (cur_price / buying_prices[i]) - 1
+                pct_profit[i].append(pctdiff * test_port[i])
+                wallets[i] = amount * cur_price
+                print("Sell " + coins[i] + " diff: " + str(pricediff) + " pct: " + str(pctdiff) +
+                      " Profits: " + str(profits[i]) + " wallet: " + str(wallets[i]))
                 continue
-        today = today + relativedelta(days=+1)
-        if today == today_plus_3m:
-            cur_prices = prices_4h[:i]
-            actions = tactics_test(cur_prices, test_port)
-            for coin in range(0, len(coins)):
-                cur_price = cur_prices.tail(1)[coins[i]]
-                if test_port[i] == 0:
-                    continue
-                    # če se je cena znižala gremo vn
-                if positions[i] == 1:
-                    positions[i] = 0
-                    pricediff = buying_prices[i] - cur_price
-                    profits[i] += pricediff
-                    pct_profit[i].append((cur_price / buying_prices[i]))
-                    print("Selling all")
-                    continue
+    today = today + relativedelta(days=+1)
+    if today >= today_plus_3m or today >= end_date_test:
+        cur_prices = test_4h_data[:today + relativedelta(days=+1)]
+        actions = tactics_test(cur_prices, test_port)
+        for i in range(0, len(coins)):
+            cur_price = cur_prices.tail(1)[coins[i]]
+            if test_port[i] == 0:
+                continue
+            if positions[i] == 1:
+                positions[i] = 0
+                amount = wallets[i] / buying_prices[i]
+                pricediff = amount * (cur_price - buying_prices[i])
+                pricediff = pricediff - 0.0001 * pricediff
+                profits[i] += pricediff
+                if bool(pricediff.item() > 0):
+                    win += 1
+                    if bool(pricediff.item() > big_win):
+                        big_win = pricediff.item()
+                if bool(pricediff.item() < 0):
+                    loss += 1
+                    if bool(pricediff.item() < big_loss):
+                        big_loss = pricediff.item()
+                pctdiff = (cur_price / buying_prices[i]) - 1
+                pct_profit[i].append(pctdiff * test_port[i])
+                wallets[i] = amount * cur_price
+                print("Sell all " + coins[i] + " diff: " + str(pricediff) + " pct: " + str(pctdiff) +
+                      " Profits: " + str(profits[i]) + " wallet: " + str(wallets[i]))
+        money = sum(wallets)
+
     # actions = tactics_test(prices_4h, test_port)
     # print(actions)
-
+print(sum(profits))
+bt = open("btcPrice.txt", "w")
+bt.write(str(btc_prices))
+bt.close()
+wal = open("wallet.txt", "w")
+wal.write(str(wallet_sum))
+wal.close()
+f = open("winloss.txt", "w")
+f.write("Wins: " + str(win) + "\nLoss: " + str(loss) + "\nBigwin: "+str(big_win) + "\nBigloss: "+ str(big_loss))
+f.close()
 f = open("profits.txt", "w")
-f.write("".join(profits))
-f.write("SUM:".join(sum(profits)))
+f.write("".join(str(profits)))
+f.write("\n SUM:" + str(sum(profits)))
 f.close()
 f = open("pctchange.txt", "w")
-f.write("".join(pct_profit))
+f.write("".join(str(pct_profit)))
+for i in range(0, len(coins)):
+    f.write("\n SUM:" + coins[i] + str(sum(pct_profit[i])))
 f.close()
 datum_3m = datum + relativedelta(months=-3)
 datum_6m = datum + relativedelta(months=-6)
-# portfolio = strategy()
+portfolio = strategy()
 # actions = tactics()
