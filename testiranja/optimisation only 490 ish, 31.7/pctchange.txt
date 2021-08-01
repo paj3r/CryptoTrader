@@ -1,0 +1,43 @@
+[[2020-05-03 00:00:00+01:00   -0.072544
+Freq: 4H, Name: ADA-USD, dtype: float64, 2020-11-02 23:00:00+00:00   -0.157088
+Freq: 4H, Name: ADA-USD, dtype: float64, 2021-07-29 20:00:00+01:00   -0.010925
+Freq: 4H, Name: ADA-USD, dtype: float64], [], [2021-02-02 23:00:00+00:00    0.218585
+Freq: 4H, Name: BNB-USD, dtype: float64, 2021-05-03 00:00:00+01:00    1.343643
+Freq: 4H, Name: BNB-USD, dtype: float64, 2021-07-29 20:00:00+01:00   -0.104964
+Freq: 4H, Name: BNB-USD, dtype: float64], [2021-02-02 23:00:00+00:00    1.292296
+Freq: 4H, Name: BTC-USD, dtype: float64, 2021-05-03 00:00:00+01:00    0.35229
+Freq: 4H, Name: BTC-USD, dtype: float64], [], [2020-08-03 00:00:00+01:00    0.316833
+Freq: 4H, Name: ETH-USD, dtype: float64, 2020-11-02 23:00:00+00:00   -0.004656
+Freq: 4H, Name: ETH-USD, dtype: float64, 2021-05-03 00:00:00+01:00    0.306561
+Freq: 4H, Name: ETH-USD, dtype: float64, 2021-07-29 20:00:00+01:00   -0.066362
+Freq: 4H, Name: ETH-USD, dtype: float64], [2020-05-03 00:00:00+01:00   -0.027579
+Freq: 4H, Name: KMD-USD, dtype: float64, 2021-07-29 20:00:00+01:00   -0.132683
+Freq: 4H, Name: KMD-USD, dtype: float64], [], [2020-08-03 00:00:00+01:00    0.2202
+Freq: 4H, Name: XLM-USD, dtype: float64], [2021-07-29 20:00:00+01:00   -0.07158
+Freq: 4H, Name: XRP-USD, dtype: float64]]
+ SUM:ADA-USD2020-05-03 00:00:00+01:00   NaN
+2020-11-02 23:00:00+00:00   NaN
+2021-07-29 20:00:00+01:00   NaN
+Name: ADA-USD, dtype: float64
+ SUM:BCH-USD0
+ SUM:BNB-USD2021-02-02 23:00:00+00:00   NaN
+2021-05-03 00:00:00+01:00   NaN
+2021-07-29 20:00:00+01:00   NaN
+Name: BNB-USD, dtype: float64
+ SUM:BTC-USD2021-02-02 23:00:00+00:00   NaN
+2021-05-03 00:00:00+01:00   NaN
+Name: BTC-USD, dtype: float64
+ SUM:DOGE-USD0
+ SUM:ETH-USD2020-08-03 00:00:00+01:00   NaN
+2020-11-02 23:00:00+00:00   NaN
+2021-05-03 00:00:00+01:00   NaN
+2021-07-29 20:00:00+01:00   NaN
+Name: ETH-USD, dtype: float64
+ SUM:KMD-USD2020-05-03 00:00:00+01:00   NaN
+2021-07-29 20:00:00+01:00   NaN
+Name: KMD-USD, dtype: float64
+ SUM:LTC-USD0
+ SUM:XLM-USD2020-08-03 00:00:00+01:00    0.2202
+Freq: 4H, Name: XLM-USD, dtype: float64
+ SUM:XRP-USD2021-07-29 20:00:00+01:00   -0.07158
+Freq: 4H, Name: XRP-USD, dtype: float64

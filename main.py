@@ -1,14 +1,18 @@
 import math
 import pmdarima
 import arch
+import tzlocal
 from datetime import date
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from dateutil import tz
 import pandas_datareader.data as pdr
 import pandas_ta as pta
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from sklearn import linear_model
+import pytz
 
 
 def get_closing(names, startdate, enddate):
@@ -147,7 +151,8 @@ def calculate_RSI(prices, dolz):
     table = np.zeros(len(coins))
     for index in range(len(coins)):
         rez = pta.rsi(prices[coins[index]], length=dolz)[-1]
-        if rez < 70:
+        rez2 = pta.rsi(prices[coins[index]], length=dolz)[-2]
+        if rez < 70 and rez2 > rez:
             table[index] = 1
         else:
             table[index] = 0
@@ -159,7 +164,27 @@ def calculate_RSI_bear(prices, dolz):
     table = np.zeros(len(coins))
     for index in range(len(coins)):
         rez = pta.rsi(prices[coins[index]], length=dolz)[-1]
-        if rez < 30:
+        rez2 = pta.rsi(prices[coins[index]], length=dolz)[-2]
+        if rez < 30 and rez2 < rez:
+            table[index] = 1
+        else:
+            table[index] = 0
+    return table
+
+def calculate_AMA(prices, short, far):
+    table = pd.DataFrame(list(zip(coins, np.zeros(len(coins)))), columns=['Coins', 'AMA'])
+    table = np.zeros(len(coins))
+    # prices = np.log(prices.pct_change())
+    for index in range(len(coins)):
+        loc_pric = prices[coins[index]]
+        a = np.std(loc_pric[-short:])
+        b = np.std(loc_pric[-far:])
+        v = b/a + short
+        p = int(round(v))
+        cut_pric = loc_pric[-p:]
+        k = np.sum(cut_pric)
+        ama = k / v
+        if ama < loc_pric[-1]:
             table[index] = 1
         else:
             table[index] = 0
@@ -177,10 +202,6 @@ def arima_garch_prediction(prices, portfo, window_size):
         arima_model = pmdarima.auto_arima(returns)
         p, d, q = arima_model.order
         arima_residuals = arima_model.resid()
-
-        print(str(returns))
-        print(portfo)
-        print(window_size)
 
         garch = arch.arch_model(arima_residuals, p=1, q=1)
         garch_fitted = garch.fit(disp=0)
@@ -260,7 +281,7 @@ def tactics_test(prices, portfo):
     print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
     arga_predicts = arima_garch_prediction(prices, portfo, 120)
     print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
-    rsi_predictions = calculate_RSI(prices, 14)
+    rsi_predictions = calculate_RSI(prices, 15)
     print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
     actions = ["" for i in range(len(coins))]
     for i in range(len(coins)):
@@ -280,7 +301,7 @@ def tactics_test_bear(prices, portfo):
     print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
     arga_predicts = arima_garch_prediction(prices, portfo, 120)
     print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
-    rsi_predictions = calculate_RSI_bear(prices, 14)
+    rsi_predictions = calculate_RSI_bear(prices, 15)
     print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
     actions = ["" for i in range(len(coins))]
     for i in range(len(coins)):
@@ -288,6 +309,27 @@ def tactics_test_bear(prices, portfo):
             actions[i] = "N/A"
             continue
         if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
+            actions[i] = "BUY"
+        else:
+            actions[i] = "SELL"
+    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
+    return actions
+
+def tactics_test_AMA(prices, portfo):
+    #linear_predicts = linear_regression(prices, 60, portfo)
+    #print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
+    arga_predicts = arima_garch_prediction(prices, portfo, 120)
+    print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
+    rsi_predictions = calculate_RSI(prices, 15)
+    print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
+    ama_predictions = calculate_AMA(prices, 10, 100)
+    print(pd.DataFrame(list(zip(coins, ama_predictions)), columns=['Coins', 'AMA']))
+    actions = ["" for i in range(len(coins))]
+    for i in range(len(coins)):
+        if portfo[i] == 0:
+            actions[i] = "N/A"
+            continue
+        if (ama_predictions[i] == 1 or arga_predicts[i] == 1) or rsi_predictions[i] == 1:
             actions[i] = "BUY"
         else:
             actions[i] = "SELL"
@@ -311,6 +353,7 @@ def strategy_test(prices_3m, prices_6m):
                            tsortino_3m_cov)
     print(pd.DataFrame(list(zip(coins, results * 100)), columns=['Coins', 'Weights (%)']))
     return results
+
 
 
 def get_ratio(prices_3m, prices_6m, weights):
@@ -340,7 +383,7 @@ datum = date.today()
 start_date_test = datum + relativedelta(days=-729)
 end_date_test = datum + relativedelta(days=-1)
 test_1day_data = get_closing(coins, start_date_test + relativedelta(months=-6), end_date_test)
-test_4h_data = get_4h_data(coins, start_date_test, end_date_test)
+test_4h_data = get_4h_data(coins, start_date_test, end_date_test).fillna(method='ffill')
 test_4h_data.to_csv("4hdata.csv", encoding='utf-8')
 today = start_date_test + relativedelta(months=+3)
 pct_profit = [[] for i in range(len(coins))]
@@ -382,28 +425,40 @@ while today < end_date_test:
         print("Bad strategy, skip 3 months")
         continue
     # print(test_4h_data[:today])
-    prices_4h = test_4h_data[:today + relativedelta(days=+1)]
-    print(today)
+    t2 = datetime.combine(today, datetime.min.time())
+    t2 = pytz.utc.localize(t2)
+    prices_4h = test_4h_data[:t2 + relativedelta(days=+1)]
+    print(t2)
     for ix in range(-6, 0):
         cur_prices = prices_4h[:ix]
         btc_prices.append(float(cur_prices.tail(1)[coins[3]].iloc[0]))
-        wallet_sum.append(float(sum(wallets)))
+        sum_assets = 0
+        for sumdex in range(len(coins)):
+            if test_port[sumdex] != 0:
+                if bool(positions[sumdex] == 1):
+                    amount = wallets[sumdex] / buying_prices[sumdex]
+                    pricediff = amount * (cur_prices.tail(1)[coins[sumdex]].iloc[0])
+                    sum_assets = sum_assets + pricediff
+                else:
+                    sum_assets = sum_assets + wallets[sumdex]
+        wallet_sum.append(float(sum_assets))
         print(wallets)
+        print(sum_assets)
         if bear:
-            actions = tactics_test_bear(cur_prices, test_port)
+            actions = tactics_test_AMA(cur_prices, test_port)
         else:
-            actions = tactics_test(cur_prices, test_port)
+            actions = tactics_test_AMA(cur_prices, test_port)
         for i in range(0, len(coins)):
             cur_price = cur_prices.tail(1)[coins[i]].iloc[0]
             if test_port[i] == 0:
                 continue
                 # če se je cena znižala gremo vn
-            if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1) and bear:
+            if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1):
                 positions[i] = 0
                 amount = wallets[i] / buying_prices[i]
                 pricediff = amount * (cur_price - buying_prices[i])
-                pricediff = pricediff - 0.0001 * pricediff
-                profits[i] += pricediff
+                pricediff = pricediff - (0.0002 * pricediff)
+                profits[i] += pricediff.item()
                 if bool(pricediff.item() > 0):
                     win += 1
                     if bool(pricediff.item() > big_win):
@@ -427,8 +482,8 @@ while today < end_date_test:
                 positions[i] = 0
                 amount = wallets[i] / buying_prices[i]
                 pricediff = amount * (cur_price - buying_prices[i])
-                pricediff = pricediff - 0.0001 * pricediff
-                profits[i] += pricediff
+                pricediff = pricediff - (0.0002 * pricediff)
+                profits[i] += pricediff.item()
                 if bool(pricediff.item() > 0):
                     win += 1
                     if bool(pricediff.item() > big_win):
@@ -445,8 +500,10 @@ while today < end_date_test:
                 continue
     today = today + relativedelta(days=+1)
     if today >= today_plus_3m or today >= end_date_test:
-        cur_prices = test_4h_data[:today + relativedelta(days=+1)]
-        actions = tactics_test(cur_prices, test_port)
+        t2 = datetime.combine(today, datetime.min.time())
+        t2 = pytz.utc.localize(t2)
+        cur_prices = test_4h_data[:t2 + relativedelta(days=+1)]
+        actions = tactics_test_AMA( cur_prices, test_port)
         for i in range(0, len(coins)):
             cur_price = cur_prices.tail(1)[coins[i]]
             if test_port[i] == 0:
