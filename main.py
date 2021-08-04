@@ -631,5 +631,5 @@ f.write("Wins: " + str(win_opt) + "\nLoss: " + str(loss_opt) + "\nBigwin: "+str(
 f.close()
 datum_3m = datum + relativedelta(months=-3)
 datum_6m = datum + relativedelta(months=-6)
-portfolio = strategy()
+# portfolio = strategy()
 # actions = tactics()
