@@ -1,34 +1,19 @@
 import math
 import pmdarima
 import arch
-import tzlocal
 from datetime import date
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from dateutil import tz
 import pandas_datareader.data as pdr
 import pandas_ta as pta
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from sklearn import linear_model
 import pytz
 
 
-def get_closing(names, startdate, enddate):
+def get_1day_data(names, startdate, enddate):
     df = pdr.get_data_yahoo(names, startdate, enddate)['Adj Close']
-    df.sort_index(inplace=True)
-    return df
-
-
-def get_volume(names, startdate, enddate):
-    df = pdr.get_data_yahoo(names, startdate, enddate)['Volume']
-    df.sort_index(inplace=True)
-    return df
-
-
-def get_marketCap(names, startdate, enddate):
-    df = pdr.get_quote_yahoo(names, startdate, enddate)['marketCap']
     df.sort_index(inplace=True)
     return df
 
@@ -59,12 +44,9 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
     new_weights = weights_coins
     regression = 0.005
     change = (1 / (1 - regression)) * regression
-    natancnost = 5
-    natancnost_end = 1
     for i in range(len(coin_names)):
         if i == 0:
             weights_coins[i] = 1
-            # weights_coins /= np.sum(weights_coins)
             old_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                        cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
             new_max = old_max
@@ -74,11 +56,9 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
             old_max = new_max
             weights_coins[weights_coins < 0.000001] = 0
             weights_coins /= np.sum(weights_coins)
-            # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
             while True:
                 weights_coins[i] += change
                 weights_coins /= np.sum(weights_coins)
-                # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
                 new_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                            cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
                 new_weights = weights_coins.copy()
@@ -94,12 +74,10 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
         old_max = new_max
         weights_coins[weights_coins < 0.000001] = 0
         weights_coins /= np.sum(weights_coins)
-        # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
         while True:
             weights_coins[i] -= change
             weights_coins[weights_coins < 0.000001] = 0
             weights_coins /= np.sum(weights_coins)
-            # weights_coins = np.round(weights_coins / np.linalg.norm(weights_coins, 1.0), natancnost)
             new_max = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                        cov_matrix_6m, cov_matrix_poz_3m, weights_coins)
             new_weights = weights_coins.copy()
@@ -109,7 +87,6 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
             else:
                 old_max = new_max
                 old_weights = new_weights.copy()
-    # print(old_weights)
     print("Ratio_pre: " + str(calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                                                cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
     old_weights = np.round(old_weights / np.linalg.norm(old_weights, 1), 2)
@@ -121,9 +98,9 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
     print("Ratio after >10% rule: " + str(
         calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                          cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
-    ratio = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
-                             cov_matrix_6m, cov_matrix_poz_3m, old_weights)
-    if ratio < 1:
+    rat = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
+                           cov_matrix_6m, cov_matrix_poz_3m, old_weights)
+    if rat < 1:
         return np.zeros(len(coin_names))
     return old_weights
 
@@ -147,7 +124,6 @@ def calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_mat
 
 
 def calculate_RSI(prices, dolz):
-    table = pd.DataFrame(list(zip(coins, np.zeros(len(coins)))), columns=['Coins', 'RSI'])
     table = np.zeros(len(coins))
     for index in range(len(coins)):
         rez = pta.rsi(prices[coins[index]], length=dolz)[-1]
@@ -160,7 +136,6 @@ def calculate_RSI(prices, dolz):
 
 
 def calculate_RSI_bear(prices, dolz):
-    table = pd.DataFrame(list(zip(coins, np.zeros(len(coins)))), columns=['Coins', 'RSI'])
     table = np.zeros(len(coins))
     for index in range(len(coins)):
         rez = pta.rsi(prices[coins[index]], length=dolz)[-1]
@@ -171,15 +146,14 @@ def calculate_RSI_bear(prices, dolz):
             table[index] = 0
     return table
 
+
 def calculate_AMA(prices, short, far):
-    table = pd.DataFrame(list(zip(coins, np.zeros(len(coins)))), columns=['Coins', 'AMA'])
     table = np.zeros(len(coins))
-    # prices = np.log(prices.pct_change())
     for index in range(len(coins)):
         loc_pric = prices[coins[index]]
         a = np.std(loc_pric[-short:])
         b = np.std(loc_pric[-far:])
-        v = b/a + short
+        v = b / a + short
         p = int(round(v))
         cut_pric = loc_pric[-p:]
         k = np.sum(cut_pric)
@@ -204,7 +178,7 @@ def arima_garch_prediction(prices, portfo, window_size):
         arima_residuals = arima_model.resid()
 
         garch = arch.arch_model(arima_residuals, p=1, q=1)
-        garch_fitted = garch.fit(disp=0)
+        garch_fitted = garch.fit(disp='off')
 
         predicted_mu = arima_model.predict(n_periods=1)[0]
 
@@ -218,149 +192,47 @@ def arima_garch_prediction(prices, portfo, window_size):
     return predictions
 
 
-def strategy():
-    prices_3m = get_closing(coins, datum_3m, datum)
-    prices_6m = get_closing(coins, datum_6m, datum)
-    day_returns_3m = prices_3m.pct_change()
-    day_returns_6m = prices_6m.pct_change()
-    day_returns_poz_3m = replace_negatives(prices_3m.pct_change())
-    mean_sharpe_3m = day_returns_3m.mean()
-    mean_sharpe_6m = day_returns_6m.mean()
-    mean_sortino_3m = day_returns_poz_3m.mean()
-    sharpe_3m_cov = day_returns_3m.cov()
-    sharpe_6m_cov = day_returns_6m.cov()
-    sortino_3m_cov = day_returns_poz_3m.cov()
-    results = optimisation(coins, mean_sharpe_3m, mean_sharpe_6m, mean_sortino_3m, sharpe_3m_cov, sharpe_6m_cov,
-                           sortino_3m_cov)
-    print(pd.DataFrame(list(zip(coins, results * 100)), columns=['Coins', 'Weights (%)']))
-    return results
-
-
-def linear_regression(prices, window_size, portfo):
-    predictions = np.zeros(len(coins))
-    data = prices[-window_size:]
-    for i in range(len(coins)):
-        if portfo[i] == 0:
-            continue
-        returns = data[coins[i]].pct_change().dropna()
-        indices = np.array([*range(0, len(returns), 1)]).reshape(-1, 1)
-        reg = linear_model.LinearRegression()
-        reg.fit(indices, returns)
-        predictions[i] = reg.coef_
-    predictions[predictions > 0] = 1
-    predictions[predictions < 0] = -1
-    return predictions
-
-
-def tactics(portfo):
-    prices_4h = get_4h_data(coins, datum_3m, datum)
-    linear_predicts = linear_regression(prices_4h, 60, portfo)
-    print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
-    arga_predicts = arima_garch_prediction(prices_4h, portfo, 120)
-    print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
-    rsi_predictions = calculate_RSI(prices_4h, 14)
-    print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
-    actions = ["" for i in range(len(coins))]
-    for i in range(len(coins)):
-        if portfo[i] == 0:
-            actions[i] = "N/A"
-            continue
-        if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
-            actions[i] = "BUY"
-        else:
-            if (linear_predicts[i] == -1 or arga_predicts[i] == -1) and rsi_predictions[i] == -1:
-                actions[i] = "SELL"
-            else:
-                actions[i] = "WAIT"
-    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
-    return actions
-
-
-def tactics_test(prices, portfo):
-    linear_predicts = linear_regression(prices, 60, portfo)
-    print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
-    arga_predicts = arima_garch_prediction(prices, portfo, 120)
-    print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
-    rsi_predictions = calculate_RSI(prices, 15)
-    print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
-    actions = ["" for i in range(len(coins))]
-    for i in range(len(coins)):
-        if portfo[i] == 0:
-            actions[i] = "N/A"
-            continue
-        if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
-            actions[i] = "BUY"
-        else:
-            actions[i] = "SELL"
-    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
-    return actions
-
-
-def tactics_test_bear(prices, portfo):
-    linear_predicts = linear_regression(prices, 60, portfo)
-    print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
-    arga_predicts = arima_garch_prediction(prices, portfo, 120)
-    print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
-    rsi_predictions = calculate_RSI_bear(prices, 15)
-    print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
-    actions = ["" for i in range(len(coins))]
-    for i in range(len(coins)):
-        if portfo[i] == 0:
-            actions[i] = "N/A"
-            continue
-        if (linear_predicts[i] == 1 or arga_predicts[i] == 1) and rsi_predictions[i] == 1:
-            actions[i] = "BUY"
-        else:
-            actions[i] = "SELL"
-    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
-    return actions
-
-def tactics_test_AMA(prices, portfo):
-    #linear_predicts = linear_regression(prices, 60, portfo)
-    #print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
+def tactics(prices, portfo):
     arga_predicts = arima_garch_prediction(prices, portfo, 120)
     print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
     rsi_predictions = calculate_RSI(prices, 15)
     print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
     ama_predictions = calculate_AMA(prices, 10, 100)
     print(pd.DataFrame(list(zip(coins, ama_predictions)), columns=['Coins', 'AMA']))
-    actions = ["" for i in range(len(coins))]
+    act = ["" for i in range(len(coins))]
     for i in range(len(coins)):
         if portfo[i] == 0:
-            actions[i] = "N/A"
+            act[i] = "N/A"
             continue
         if (ama_predictions[i] == 1 or arga_predicts[i] == 1) or rsi_predictions[i] == 1:
-            actions[i] = "BUY"
+            act[i] = "BUY"
         else:
-            actions[i] = "SELL"
-    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
-    return actions
+            act[i] = "SELL"
+    print(pd.DataFrame(list(zip(coins, act)), columns=['Coins', 'Actions']))
+    return act
 
-def tactics_test_AMA_bear(prices, portfo):
-    #linear_predicts = linear_regression(prices, 60, portfo)
-    #print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
+
+def tactics_bear(prices, portfo):
     arga_predicts = arima_garch_prediction(prices, portfo, 120)
     print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
     rsi_predictions = calculate_RSI_bear(prices, 15)
     print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
     ama_predictions = calculate_AMA(prices, 10, 100)
     print(pd.DataFrame(list(zip(coins, ama_predictions)), columns=['Coins', 'AMA']))
-    actions = ["" for i in range(len(coins))]
+    act = ["" for i in range(len(coins))]
     for i in range(len(coins)):
         if portfo[i] == 0:
-            actions[i] = "N/A"
+            act[i] = "N/A"
             continue
         if (ama_predictions[i] == 1 or arga_predicts[i] == 1) or rsi_predictions[i] == 1:
-            actions[i] = "BUY"
+            act[i] = "BUY"
         else:
-            actions[i] = "SELL"
-    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
-    return actions
+            act[i] = "SELL"
+    print(pd.DataFrame(list(zip(coins, act)), columns=['Coins', 'Actions']))
+    return act
 
 
-def strategy_test(prices_3m, prices_6m):
-    # prices_3m = get_closing(coins, datum_3m, datum)
-    # prices_6m = get_closing(coins, datum_6m, datum)
+def strategy(prices_3m, prices_6m):
     tday_returns_3m = prices_3m.pct_change()
     tday_returns_6m = prices_6m.pct_change()
     tday_returns_poz_3m = replace_negatives(prices_3m.pct_change())
@@ -376,10 +248,7 @@ def strategy_test(prices_3m, prices_6m):
     return results
 
 
-
 def get_ratio(prices_3m, prices_6m, weights):
-    # prices_3m = get_closing(coins, datum_3m, datum)
-    # prices_6m = get_closing(coins, datum_6m, datum)
     tday_returns_3m = prices_3m.pct_change()
     tday_returns_6m = prices_6m.pct_change()
     tday_returns_poz_3m = replace_negatives(prices_3m.pct_change())
@@ -400,14 +269,13 @@ coins = ['ADA-USD', 'BCH-USD', 'BNB-USD', 'BTC-USD', 'DOGE-USD', 'ETH-USD', 'KMD
 # teže koliko bomo upoštevali kater indikator v optimizaciji format [SHARPE(3m), SHARPE(6m), SORTINO(3m)]
 weights_ratios = [0.4, 0.3, 0.3]
 datum = date(2021, 8, 3)
-# print(datum)
 start_date_test = datum + relativedelta(days=-729)
 end_date_test = datum + relativedelta(days=-1)
-#test_1day_data = get_closing(coins, start_date_test + relativedelta(months=-6), end_date_test)
-#test_1day_data.to_csv("1daydata.csv", encoding='utf-8')
+# test_1day_data = get_closing(coins, start_date_test + relativedelta(months=-6), end_date_test)
+# test_1day_data.to_csv("1daydata.csv", encoding='utf-8')
 test_1day_data = pd.read_csv("1daydata.csv", parse_dates=[0], index_col=0)
-#test_4h_data = get_4h_data(coins, start_date_test, end_date_test).fillna(method='ffill')
-#test_4h_data.to_csv("4hdata.csv", encoding='utf-8')
+# test_4h_data = get_4h_data(coins, start_date_test, end_date_test).fillna(method='ffill')
+# test_4h_data.to_csv("4hdata.csv", encoding='utf-8')
 test_4h_data = pd.read_csv("4hdata.csv", parse_dates=[0], index_col=0).fillna(method='ffill')
 today = start_date_test + relativedelta(months=+3)
 pct_profit = [[] for i in range(len(coins))]
@@ -440,8 +308,8 @@ while today < end_date_test:
         print("Strategy change" + "date: " + str(today))
         wallets = np.zeros(len(coins))
         wallets_opt = np.zeros(len(coins))
-        test_port = strategy_test(test_1day_data[(today + relativedelta(months=-3)):today],
-                                  test_1day_data[(today + relativedelta(months=-6)):today])
+        test_port = strategy(test_1day_data[(today + relativedelta(months=-3)):today],
+                             test_1day_data[(today + relativedelta(months=-6)):today])
         today_plus_3m = today + relativedelta(months=+3)
         ratio = get_ratio(test_1day_data[(today + relativedelta(months=-3)):today],
                           test_1day_data[(today + relativedelta(months=-6)):today], test_port)
@@ -457,7 +325,7 @@ while today < end_date_test:
         else:
             bear = True
     if np.array_equal(test_port, np.zeros(len(coins))) and not bad:
-        #today = today + relativedelta(months=+3)
+        # today = today + relativedelta(months=+3)
         bad = True
         print("Bad strategy, skip 3 months")
     # print(test_4h_data[:today])
@@ -502,9 +370,9 @@ while today < end_date_test:
         print(wallets)
         print(sum_assets)
         if bear:
-            actions = tactics_test_AMA_bear(cur_prices, test_port)
+            actions = tactics_bear(cur_prices, test_port)
         else:
-            actions = tactics_test_AMA(cur_prices, test_port)
+            actions = tactics(cur_prices, test_port)
         for i in range(0, len(coins)):
             cur_price = cur_prices.tail(1)[coins[i]].iloc[0]
             if test_port[i] == 0:
@@ -560,7 +428,7 @@ while today < end_date_test:
         t2 = datetime.combine(today, datetime.min.time())
         t2 = pytz.utc.localize(t2)
         cur_prices = test_4h_data[:t2 + relativedelta(days=+1)]
-        actions = tactics_test_AMA( cur_prices, test_port)
+        actions = tactics(cur_prices, test_port)
         for i in range(0, len(coins)):
             cur_price = cur_prices.tail(1)[coins[i]]
             if test_port[i] == 0:
@@ -610,9 +478,6 @@ while today < end_date_test:
         if not bad:
             money = sum(wallets)
             money_opt = sum(wallets_opt)
-
-    # actions = tactics_test(prices_4h, test_port)
-    # print(actions)
 print(sum(profits))
 bt = open("rezultati/btcPrice.txt", "w")
 bt.write(str(btc_prices))
@@ -624,12 +489,9 @@ wal2 = open("rezultati/wallet_opt.txt", "w")
 wal2.write(str(opt_only_sum))
 wal2.close()
 f = open("rezultati/winloss.txt", "w")
-f.write("Wins: " + str(win) + "\nLoss: " + str(loss) + "\nBigwin: "+str(big_win) + "\nBigloss: "+ str(big_loss))
+f.write("Wins: " + str(win) + "\nLoss: " + str(loss) + "\nBigwin: " + str(big_win) + "\nBigloss: " + str(big_loss))
 f.close()
 f = open("rezultati/winloss_opt.txt", "w")
-f.write("Wins: " + str(win_opt) + "\nLoss: " + str(loss_opt) + "\nBigwin: "+str(big_win_opt) + "\nBigloss: "+ str(big_loss_opt))
+f.write("Wins: " + str(win_opt) + "\nLoss: " + str(loss_opt) + "\nBigwin: " + str(big_win_opt) + "\nBigloss: " + str(
+    big_loss_opt))
 f.close()
-datum_3m = datum + relativedelta(months=-3)
-datum_6m = datum + relativedelta(months=-6)
-# portfolio = strategy()
-# actions = tactics()
