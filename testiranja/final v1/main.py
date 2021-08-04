@@ -123,7 +123,7 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
                          cov_matrix_6m, cov_matrix_poz_3m, old_weights)))
     ratio = calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                              cov_matrix_6m, cov_matrix_poz_3m, old_weights)
-    if ratio < 1:
+    if ratio < 2:
         return np.zeros(len(coin_names))
     return old_weights
 
@@ -336,27 +336,6 @@ def tactics_test_AMA(prices, portfo):
     print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
     return actions
 
-def tactics_test_AMA_bear(prices, portfo):
-    #linear_predicts = linear_regression(prices, 60, portfo)
-    #print(pd.DataFrame(list(zip(coins, linear_predicts)), columns=['Coins', 'Linear Regression']))
-    arga_predicts = arima_garch_prediction(prices, portfo, 120)
-    print(pd.DataFrame(list(zip(coins, arga_predicts)), columns=['Coins', 'ARIMA+GARCH']))
-    rsi_predictions = calculate_RSI_bear(prices, 15)
-    print(pd.DataFrame(list(zip(coins, rsi_predictions)), columns=['Coins', 'RSI']))
-    ama_predictions = calculate_AMA(prices, 10, 100)
-    print(pd.DataFrame(list(zip(coins, ama_predictions)), columns=['Coins', 'AMA']))
-    actions = ["" for i in range(len(coins))]
-    for i in range(len(coins)):
-        if portfo[i] == 0:
-            actions[i] = "N/A"
-            continue
-        if (ama_predictions[i] == 1 or arga_predicts[i] == 1) or rsi_predictions[i] == 1:
-            actions[i] = "BUY"
-        else:
-            actions[i] = "SELL"
-    print(pd.DataFrame(list(zip(coins, actions)), columns=['Coins', 'Actions']))
-    return actions
-
 
 def strategy_test(prices_3m, prices_6m):
     # prices_3m = get_closing(coins, datum_3m, datum)
@@ -456,7 +435,7 @@ while today < end_date_test:
             bear = False
         else:
             bear = True
-    if np.array_equal(test_port, np.zeros(len(coins))) and not bad:
+    if np.array_equal(test_port, np.zeros(len(coins))) and bad == False:
         #today = today + relativedelta(months=+3)
         bad = True
         print("Bad strategy, skip 3 months")
@@ -502,7 +481,7 @@ while today < end_date_test:
         print(wallets)
         print(sum_assets)
         if bear:
-            actions = tactics_test_AMA_bear(cur_prices, test_port)
+            actions = tactics_test_AMA(cur_prices, test_port)
         else:
             actions = tactics_test_AMA(cur_prices, test_port)
         for i in range(0, len(coins)):
@@ -614,19 +593,19 @@ while today < end_date_test:
     # actions = tactics_test(prices_4h, test_port)
     # print(actions)
 print(sum(profits))
-bt = open("rezultati/btcPrice.txt", "w")
+bt = open("btcPrice.txt", "w")
 bt.write(str(btc_prices))
 bt.close()
-wal = open("rezultati/wallet.txt", "w")
+wal = open("wallet.txt", "w")
 wal.write(str(wallet_sum))
 wal.close()
-wal2 = open("rezultati/wallet_opt.txt", "w")
+wal2 = open("wallet_opt.txt", "w")
 wal2.write(str(opt_only_sum))
 wal2.close()
-f = open("rezultati/winloss.txt", "w")
+f = open("winloss.txt", "w")
 f.write("Wins: " + str(win) + "\nLoss: " + str(loss) + "\nBigwin: "+str(big_win) + "\nBigloss: "+ str(big_loss))
 f.close()
-f = open("rezultati/winloss_opt.txt", "w")
+f = open("winloss_opt.txt", "w")
 f.write("Wins: " + str(win_opt) + "\nLoss: " + str(loss_opt) + "\nBigwin: "+str(big_win_opt) + "\nBigloss: "+ str(big_loss_opt))
 f.close()
 datum_3m = datum + relativedelta(months=-3)

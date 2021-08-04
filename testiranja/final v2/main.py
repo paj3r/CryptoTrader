@@ -456,7 +456,7 @@ while today < end_date_test:
             bear = False
         else:
             bear = True
-    if np.array_equal(test_port, np.zeros(len(coins))) and not bad:
+    if np.array_equal(test_port, np.zeros(len(coins))) and bad:
         #today = today + relativedelta(months=+3)
         bad = True
         print("Bad strategy, skip 3 months")
@@ -614,19 +614,19 @@ while today < end_date_test:
     # actions = tactics_test(prices_4h, test_port)
     # print(actions)
 print(sum(profits))
-bt = open("rezultati/btcPrice.txt", "w")
+bt = open("btcPrice.txt", "w")
 bt.write(str(btc_prices))
 bt.close()
-wal = open("rezultati/wallet.txt", "w")
+wal = open("wallet.txt", "w")
 wal.write(str(wallet_sum))
 wal.close()
-wal2 = open("rezultati/wallet_opt.txt", "w")
+wal2 = open("wallet_opt.txt", "w")
 wal2.write(str(opt_only_sum))
 wal2.close()
-f = open("rezultati/winloss.txt", "w")
+f = open("winloss.txt", "w")
 f.write("Wins: " + str(win) + "\nLoss: " + str(loss) + "\nBigwin: "+str(big_win) + "\nBigloss: "+ str(big_loss))
 f.close()
-f = open("rezultati/winloss_opt.txt", "w")
+f = open("winloss_opt.txt", "w")
 f.write("Wins: " + str(win_opt) + "\nLoss: " + str(loss_opt) + "\nBigwin: "+str(big_win_opt) + "\nBigloss: "+ str(big_loss_opt))
 f.close()
 datum_3m = datum + relativedelta(months=-3)
