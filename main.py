@@ -107,7 +107,7 @@ def optimisation(coin_names, mean_return_3m, mean_return_6m, mean_return_poz_3m,
 
 def calculate_ratios(mean_return_3m, mean_return_6m, mean_return_poz_3m, cov_matrix_3m,
                      cov_matrix_6m, cov_matrix_poz_3m, weights_coins):
-    if (weights_coins == np.zeros(len(coins))).all():
+    if np.array_equal(weights_coins, np.zeros(len(coins))):
         return 0
     returns_3m = np.sum(mean_return_3m * weights_coins) * 252
     returns_6m = np.sum(mean_return_6m * weights_coins) * 252
@@ -313,7 +313,6 @@ while today < end_date_test:
         today_plus_3m = today + relativedelta(months=+3)
         ratio = get_ratio(test_1day_data[(today + relativedelta(months=-3)):today],
                           test_1day_data[(today + relativedelta(months=-6)):today], test_port)
-        print(ratio)
         for i in range(0, len(coins)):
             if test_port[i] == 0:
                 continue
@@ -377,7 +376,7 @@ while today < end_date_test:
             cur_price = cur_prices.tail(1)[coins[i]].iloc[0]
             if test_port[i] == 0:
                 continue
-                # če se je cena znižala gremo vn
+            # Varovalni mehanizem
             if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1):
                 positions[i] = 0
                 amount = wallets[i] / buying_prices[i]
@@ -429,6 +428,7 @@ while today < end_date_test:
         t2 = pytz.utc.localize(t2)
         cur_prices = test_4h_data[:t2 + relativedelta(days=+1)]
         actions = tactics(cur_prices, test_port)
+        #sell at period end
         for i in range(0, len(coins)):
             cur_price = cur_prices.tail(1)[coins[i]]
             if test_port[i] == 0:
