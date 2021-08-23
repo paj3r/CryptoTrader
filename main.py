@@ -262,6 +262,21 @@ def get_ratio(prices_3m, prices_6m, weights):
                               tsortino_3m_cov, weights)
     return ratios
 
+def get_sharpe(prices_3m, weights):
+    tday_returns_3m = prices_3m.pct_change()
+    tmean_sharpe_3m = tday_returns_3m.mean()
+    tsharpe_3m_cov = tday_returns_3m.cov()
+    ratios = calculate_sharpe(tmean_sharpe_3m, tsharpe_3m_cov, weights, len(prices_3m))
+    return ratios
+
+def calculate_sharpe(mean_return_3m, cov_matrix_3m, weights_coins, len):
+    returns_3m = np.sum(mean_return_3m * weights_coins) * len
+    std_dev_3m = np.sqrt(np.dot(weights_coins.T, np.dot(cov_matrix_3m, weights_coins))) * np.sqrt(len)
+    risk_free_return = 0.012
+    sharpe_3m = (returns_3m - risk_free_return) / std_dev_3m
+    rez = sharpe_3m
+    return rez
+
 
 yf.pdr_override()
 coins = ['ADA-USD', 'BCH-USD', 'BNB-USD', 'BTC-USD', 'DOGE-USD', 'ETH-USD', 'KMD-USD', 'LTC-USD', 'XLM-USD',
@@ -295,11 +310,20 @@ profits = np.zeros(len(coins))
 positions = np.zeros(len(coins))
 buying_prices = np.zeros(len(coins))
 test_port = np.zeros(len(coins))
+btc_port = np.zeros(len(coins))
+be_port = np.zeros(len(coins))
+btc_port[3] = 1
+be_port[3] = 0.5
+be_port[5] = 0.5
 today_plus_3m = today
 bear = False
 btc_prices = []
+eth_prices = []
 wallet_sum = []
 opt_only_sum = []
+sharpe_wal = []
+sharpe_btc = []
+sharpe_be = []
 positions_opt_only = np.zeros(len(coins))
 buying_prices_opt_only = np.zeros(len(coins))
 while today < end_date_test:
@@ -335,11 +359,15 @@ while today < end_date_test:
     for i in range(len(coins)):
         if test_port[i] != 0 and positions_opt_only[i] == 0:
             positions_opt_only[i] = 1
-            buying_prices_opt_only[i] = prices_4h.tail(1)[coins[i]].iloc[0]
+            buying_prices_opt_only[i] = prices_4h.tail(7)[coins[i]].iloc[0]
             print("Buy (optimisation only) " + coins[i])
     for ix in range(-6, 0):
         cur_prices = prices_4h[:ix]
         btc_prices.append(float(cur_prices.tail(1)[coins[3]].iloc[0]))
+        eth_prices.append(float(cur_prices.tail(1)[coins[5]].iloc[0]))
+        sharpe_wal.append(get_sharpe(cur_prices[t2 + relativedelta(months=-3):], test_port))
+        sharpe_btc.append(get_sharpe(cur_prices[t2 + relativedelta(months=-3):], btc_port))
+        sharpe_be.append(get_sharpe(cur_prices[t2 + relativedelta(months=-3):], be_port))
         sum_assets = 0
         # getting prices for optimisation only
         for sumdex in range(len(coins)):
@@ -354,7 +382,7 @@ while today < end_date_test:
                 sum_assets = money_opt
         opt_only_sum.append(float(sum_assets))
         sum_assets = 0
-        # getting prices for the whole srategy
+        # getting prices for the whole strategy
         for sumdex in range(len(coins)):
             if test_port[sumdex] != 0:
                 if bool(positions[sumdex] == 1):
@@ -368,10 +396,11 @@ while today < end_date_test:
         wallet_sum.append(float(sum_assets))
         print(wallets)
         print(sum_assets)
-        if bear:
-            actions = tactics_bear(cur_prices, test_port)
-        else:
-            actions = tactics(cur_prices, test_port)
+        if not bad :
+            if bear:
+                actions = tactics_bear(cur_prices, test_port)
+            else:
+                actions = tactics(cur_prices, test_port)
         for i in range(0, len(coins)):
             cur_price = cur_prices.tail(1)[coins[i]].iloc[0]
             if test_port[i] == 0:
@@ -482,6 +511,18 @@ print(sum(profits))
 bt = open("rezultati/btcPrice.txt", "w")
 bt.write(str(btc_prices))
 bt.close()
+et = open("rezultati/ethPrice.txt", "w")
+et.write(str(eth_prices))
+et.close()
+bt = open("rezultati/btcSharpe.txt", "w")
+bt.write(str(sharpe_btc))
+bt.close()
+et = open("rezultati/beSharpe.txt", "w")
+et.write(str(sharpe_be))
+et.close()
+wal = open("rezultati/walletSharpe.txt", "w")
+wal.write(str(sharpe_wal))
+wal.close()
 wal = open("rezultati/wallet.txt", "w")
 wal.write(str(wallet_sum))
 wal.close()
