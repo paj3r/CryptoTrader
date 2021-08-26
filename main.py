@@ -302,6 +302,7 @@ loss_opt = 0
 win_opt = 0
 big_win_opt = 0
 big_loss_opt = 0
+st_akcij = 0
 money = 100
 money_opt = 100
 wallets = np.zeros(len(coins))
@@ -329,6 +330,7 @@ buying_prices_opt_only = np.zeros(len(coins))
 while today < end_date_test:
     bad = False
     if today >= today_plus_3m:
+        st_akcij = 0
         print("Strategy change" + "date: " + str(today))
         wallets = np.zeros(len(coins))
         wallets_opt = np.zeros(len(coins))
@@ -396,7 +398,7 @@ while today < end_date_test:
         wallet_sum.append(float(sum_assets))
         print(wallets)
         print(sum_assets)
-        if not bad :
+        if not bad:
             if bear:
                 actions = tactics_bear(cur_prices, test_port)
             else:
@@ -407,6 +409,7 @@ while today < end_date_test:
                 continue
             # Varovalni mehanizem
             if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1):
+                st_akcij += 1
                 positions[i] = 0
                 amount = wallets[i] / buying_prices[i]
                 pricediff = amount * (cur_price - buying_prices[i])
@@ -427,11 +430,13 @@ while today < end_date_test:
                       " Profits: " + str(profits[i]) + " wallet: " + str(wallets[i]))
                 continue
             if bool(actions[i] == "BUY") and bool(positions[i] == 0):
+                st_akcij += 1
                 positions[i] = 1
                 buying_prices[i] = cur_price
                 print("Buy " + coins[i])
                 continue
             if bool(actions[i] == "SELL") and bool(positions[i] == 1):
+                st_akcij += 1
                 positions[i] = 0
                 amount = wallets[i] / buying_prices[i]
                 pricediff = amount * (cur_price - buying_prices[i])
@@ -463,6 +468,7 @@ while today < end_date_test:
             if test_port[i] == 0:
                 continue
             if positions[i] == 1:
+                st_akcij += 1
                 positions[i] = 0
                 amount = wallets[i] / buying_prices[i]
                 pricediff = amount * (cur_price - buying_prices[i])
@@ -502,6 +508,7 @@ while today < end_date_test:
                 wallets_opt[i] = amount * cur_price
                 print("Sell all " + coins[i] + " diff: " + str(pricediff)
                       + " wallet: " + str(wallets_opt[i]))
+        print("Število akcij : "+str(st_akcij))
         wallet_sum.append(float(0))
         opt_only_sum.append(float(0))
         if not bad:
