@@ -12,4 +12,4 @@ Ta repozitorij vsebuje program za trgovanje s kriptovalutami, narejen za potrebe
 # Zagon programa
 Za zagon programa potrebujemo Python 3.9. Ob zagonu programa main.py se začne izvajani test na predhodnih podatkih, ki so locirani v datotekah **1daydata.csv**, ter **4hdata.csv**.
 Rezultati testiranja se bodo po končanem testiranju zapisali v mapo **rezultati**. Če želimo aktualne podatke,
-lahko pokličemo funkciji get_1day_data(), ter get_4h_data(), da dobimo aktualne podatke in jih vstavimo v funkciji strategy() in tactics().
+lahko pokličemo funkciji *get_1day_data()*, ter *get_4h_data()*, da dobimo aktualne podatke in jih vstavimo v funkciji *strategy()* in *tactics()*.
