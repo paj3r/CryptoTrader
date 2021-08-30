@@ -2,7 +2,7 @@
 Ta repozitorij vsebuje program za trgovanje s kriptovalutami, narejen za potrebe diplomskega dela na fakulteti za Računalništvo in Informatiko, Univerze v Ljubljani.
 # Vsebina repozitorija:
 - Strateški del strategije :
-  - Optimizacija portfoleja na podlagi razmerij Sharpe in Sortino, 
+  - optimizacija portfoleja na podlagi razmerij Sharpe in Sortino, 
 - Taktični del strategije :
   - model ARIMA + GARCH
   - indikator AMA'
