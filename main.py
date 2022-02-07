@@ -204,7 +204,7 @@ def tactics(prices, portfo):
         if portfo[i] == 0:
             act[i] = "N/A"
             continue
-        if (ama_predictions[i] == 1 or arga_predicts[i] == 1) or rsi_predictions[i] == 1:
+        if (rsi_predictions[i] == 1 or arga_predicts[i] == 1) or ama_predictions[i] == 1:
             act[i] = "BUY"
         else:
             act[i] = "SELL"
@@ -224,7 +224,7 @@ def tactics_bear(prices, portfo):
         if portfo[i] == 0:
             act[i] = "N/A"
             continue
-        if (ama_predictions[i] == 1 or arga_predicts[i] == 1) or rsi_predictions[i] == 1:
+        if (rsi_predictions[i] == 1 or arga_predicts[i] == 1) and ama_predictions[i] == 1:
             act[i] = "BUY"
         else:
             act[i] = "SELL"
@@ -277,12 +277,20 @@ def calculate_sharpe(mean_return_3m, cov_matrix_3m, weights_coins, len):
     rez = sharpe_3m
     return rez
 
+def max_drawdown(prices):
+    if prices == []:
+        return False
+    if (prices[-1]/max(prices)) > 0.9:
+        return False
+    else:
+        return True
+
 
 yf.pdr_override()
 coins = ['ADA-USD', 'BCH-USD', 'BNB-USD', 'BTC-USD', 'DOGE-USD', 'ETH-USD', 'KMD-USD', 'LTC-USD', 'XLM-USD',
          'XRP-USD']
 # teže koliko bomo upoštevali kater indikator v optimizaciji format [SHARPE(3m), SHARPE(6m), SORTINO(3m)]
-weights_ratios = [0.4, 0.3, 0.3]
+weights_ratios = [0.33, 0.33, 0.34]
 datum = date(2021, 8, 3)
 start_date_test = datum + relativedelta(days=-729)
 end_date_test = datum + relativedelta(days=-1)
@@ -334,8 +342,7 @@ while today < end_date_test:
         print("Strategy change" + "date: " + str(today))
         wallets = np.zeros(len(coins))
         wallets_opt = np.zeros(len(coins))
-        test_port = strategy(test_1day_data[(today + relativedelta(months=-3)):today],
-                             test_1day_data[(today + relativedelta(months=-6)):today])
+        test_port = be_port
         today_plus_3m = today + relativedelta(months=+3)
         ratio = get_ratio(test_1day_data[(today + relativedelta(months=-3)):today],
                           test_1day_data[(today + relativedelta(months=-6)):today], test_port)
@@ -345,7 +352,7 @@ while today < end_date_test:
             else:
                 wallets[i] = money * test_port[i]
                 wallets_opt[i] = money_opt * test_port[i]
-        if ratio > 2:
+        if ratio > 3:
             bear = False
         else:
             bear = True
@@ -354,6 +361,13 @@ while today < end_date_test:
         bad = True
         print("Bad strategy, skip 3 months")
     # print(test_4h_data[:today])
+    ratio = get_ratio(test_1day_data[(today + relativedelta(months=-3)):today],
+                      test_1day_data[(today + relativedelta(months=-6)):today], test_port)
+    print(ratio)
+    if ratio > 3:
+        bear = False
+    else:
+        bear = True
     t2 = datetime.combine(today, datetime.min.time())
     t2 = pytz.utc.localize(t2)
     prices_4h = test_4h_data[:t2 + relativedelta(days=+1)]
@@ -408,7 +422,7 @@ while today < end_date_test:
             if test_port[i] == 0:
                 continue
             # Varovalni mehanizem
-            if bool(cur_price < buying_prices[i]) and bool(positions[i] == 1):
+            if (bool(cur_price < buying_prices[i])) and bool(positions[i] == 1):
                 st_akcij += 1
                 positions[i] = 0
                 amount = wallets[i] / buying_prices[i]
